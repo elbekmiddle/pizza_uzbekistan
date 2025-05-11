@@ -1,10 +1,10 @@
-import NextAuth, { NextAuthOptions } from 'next-auth';
-import { prisma } from '@/lib/prisma';
-import { compare, hashSync } from 'bcrypt';
-import { UserRole } from '@prisma/client';
+import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import GitHubProvider from 'next-auth/providers/github';
+import { compare, hashSync } from 'bcrypt';
+import { UserRole } from '@prisma/client';
+import { prisma } from './prisma';
 
 export const authOptions: NextAuthOptions = {
   session: {
@@ -38,21 +38,13 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials) return null;
 
-        const values = {
-          email: credentials.email,
-        };
-
-        const findUser = await prisma.user.findFirst({
-          where: values,
-        });
+        const values = { email: credentials.email };
+        const findUser = await prisma.user.findFirst({ where: values });
 
         if (!findUser) return null;
 
         const isPasswordValid = await compare(credentials.password, findUser.password);
-
-        if (!isPasswordValid) return null;
-
-        if (!findUser.verified) return null;
+        if (!isPasswordValid || !findUser.verified) return null;
 
         return {
           id: String(findUser.id),
@@ -66,15 +58,9 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       try {
-        if (account?.provider === 'credentials') {
-          return true;
-        }
+        if (account?.provider === 'credentials') return true;
 
-        console.log(user, account);
-
-        if (!user.email) {
-          return false;
-        }
+        if (!user.email) return false;
 
         const findUser = await prisma.user.findFirst({
           where: {
@@ -87,9 +73,7 @@ export const authOptions: NextAuthOptions = {
 
         if (findUser) {
           await prisma.user.update({
-            where: {
-              id: findUser.id,
-            },
+            where: { id: findUser.id },
             data: {
               provider: account?.provider,
               providerId: account?.providerAccountId,
@@ -117,9 +101,7 @@ export const authOptions: NextAuthOptions = {
     },
     async jwt({ token }) {
       const findUser = await prisma.user.findFirst({
-        where: {
-          email: token.email!,
-        },
+        where: { email: token.email! },
       });
 
       if (findUser) {
@@ -141,7 +123,3 @@ export const authOptions: NextAuthOptions = {
     },
   },
 };
-
-const handler = NextAuth(authOptions);
-
-export { handler as GET, handler as POST };
